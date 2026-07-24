@@ -1,1058 +1,306 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>怪我管理システム</title>
-<style>
-  :root {
-    color-scheme: light;
-    --surface-1:      #fcfcfb;
-    --page-plane:     #f9f9f7;
-    --text-primary:   #0b0b0b;
-    --text-secondary: #52514e;
-    --text-muted:     #898781;
-    --gridline:       #e1e0d9;
-    --baseline:       #c3c2b7;
-    --border:         rgba(11,11,11,0.10);
-    --series-1:       #2a78d6; /* blue: 診断名別 */
-    --series-2:       #eb6834; /* orange: 区分別 */
-    --status-good:    #0ca30c;
-    --status-critical:#d03b3b;
-    --status-good-bg:    rgba(12,163,12,0.10);
-    --status-critical-bg:rgba(208,59,59,0.10);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --surface-1:      #1a1a19;
-      --page-plane:     #0d0d0d;
-      --text-primary:   #ffffff;
-      --text-secondary: #c3c2b7;
-      --text-muted:     #898781;
-      --gridline:       #2c2c2a;
-      --baseline:       #383835;
-      --border:         rgba(255,255,255,0.10);
-      --series-1:       #3987e5;
-      --series-2:       #d95926;
-      --status-good:    #0ca30c;
-      --status-critical:#e66767;
-      --status-good-bg:    rgba(12,163,12,0.16);
-      --status-critical-bg:rgba(230,103,103,0.16);
-    }
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-    background: var(--page-plane);
-    color: var(--text-primary);
-    -webkit-font-smoothing: antialiased;
-  }
-  .wrap {
-    max-width: 980px;
-    margin: 0 auto;
-    padding: 32px 20px 80px;
-  }
-  h1 {
-    font-size: 22px;
-    font-weight: 700;
-    margin: 0 0 4px;
-  }
-  .subtitle {
-    color: var(--text-secondary);
-    font-size: 13px;
-    margin: 0 0 28px;
-  }
-  .card {
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 20px;
-  }
-  .card h2 {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 0 0 16px;
-    color: var(--text-primary);
-  }
-
-  /* stat tiles */
-  .tiles {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-  .tile {
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-  }
-  .tile .label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-bottom: 6px;
-  }
-  .tile .value {
-    font-size: 26px;
-    font-weight: 700;
-    font-variant-numeric: proportional-nums;
-  }
-  .tile.accent-critical .value { color: var(--status-critical); }
-  .tile.accent-good .value { color: var(--status-good); }
-
-  /* form */
-  form.entry {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 12px;
-    align-items: end;
-  }
-  form.entry .field { display: flex; flex-direction: column; gap: 6px; }
-  form.entry .field.wide { grid-column: span 2; }
-  label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    font-weight: 500;
-  }
-  input, select {
-    font: inherit;
-    font-size: 14px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--baseline);
-    background: var(--surface-1);
-    color: var(--text-primary);
-  }
-  input:focus, select:focus {
-    outline: 2px solid var(--series-1);
-    outline-offset: 1px;
-  }
-  .preview {
-    font-size: 12px;
-    color: var(--text-muted);
-    grid-column: 1 / -1;
-    min-height: 16px;
-  }
-  .form-actions {
-    grid-column: 1 / -1;
-    display: flex;
-    gap: 8px;
-    margin-top: 4px;
-  }
-  button {
-    font: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 9px 16px;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-  }
-  button.primary { background: var(--series-1); color: #fff; }
-  button.primary:hover { filter: brightness(1.08); }
-  button.ghost {
-    background: transparent;
-    color: var(--text-secondary);
-    border: 1px solid var(--baseline);
-  }
-  button.ghost:hover { background: var(--gridline); }
-  button.link {
-    background: transparent;
-    padding: 4px 8px;
-    font-weight: 500;
-    color: var(--series-1);
-  }
-  button.link.danger { color: var(--status-critical); }
-  button.link:hover { text-decoration: underline; }
-
-  /* sync (spreadsheet) */
-  .sync-row {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 10px;
-  }
-  .sync-row input { flex: 1; min-width: 220px; }
-  .sync-status {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin-bottom: 8px;
-  }
-  .sync-status .dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--text-muted);
-    flex-shrink: 0;
-  }
-  .sync-status.connected .dot { background: var(--status-good); }
-  .sync-status.connected { color: var(--status-good); }
-  .sync-status.error .dot { background: var(--status-critical); }
-  .sync-status.error { color: var(--status-critical); }
-  .sync-help {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin: 0;
-    line-height: 1.6;
-  }
-
-  /* toolbar (CSV) */
-  .toolbar {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 14px;
-    flex-wrap: wrap;
-  }
-  .file-btn {
-    display: inline-flex;
-    align-items: center;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 9px 16px;
-    border-radius: 8px;
-    border: 1px solid var(--baseline);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
-  .file-btn:hover { background: var(--gridline); }
-  .file-btn input[type="file"] {
-    position: absolute;
-    width: 1px; height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-  }
-
-  /* filters */
-  .filters {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin-bottom: 14px;
-    flex-wrap: wrap;
-  }
-  .filters input[type="search"] { flex: 1; min-width: 160px; }
-  .segmented {
-    display: flex;
-    border: 1px solid var(--baseline);
-    border-radius: 8px;
-    overflow: hidden;
-  }
-  .segmented button {
-    border-radius: 0;
-    background: var(--surface-1);
-    color: var(--text-secondary);
-    font-weight: 500;
-    padding: 8px 12px;
-    border-right: 1px solid var(--baseline);
-  }
-  .segmented button:last-child { border-right: none; }
-  .segmented button.active {
-    background: var(--series-1);
-    color: #fff;
-  }
-
-  /* table */
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th {
-    text-align: left;
-    font-weight: 600;
-    color: var(--text-secondary);
-    font-size: 12px;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--baseline);
-    white-space: nowrap;
-  }
-  tbody td {
-    padding: 10px 10px;
-    border-bottom: 1px solid var(--gridline);
-    vertical-align: middle;
-  }
-  tbody tr:hover { background: var(--gridline); }
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 3px 9px 3px 7px;
-    border-radius: 999px;
-  }
-  .badge .dot { width: 8px; height: 8px; border-radius: 50%; }
-  .badge.out { background: var(--status-critical-bg); color: var(--status-critical); }
-  .badge.out .dot { background: var(--status-critical); }
-  .badge.returned { background: var(--status-good-bg); color: var(--status-good); }
-  .badge.returned .dot { background: var(--status-good); }
-  .empty-row td {
-    text-align: center;
-    color: var(--text-muted);
-    padding: 32px 0;
-  }
-  .table-scroll { overflow-x: auto; }
-  .quick-entry {
-    display: inline-flex;
-    gap: 4px;
-    align-items: center;
-  }
-  .quick-entry input {
-    width: 56px;
-    padding: 5px 6px;
-    font-size: 12px;
-  }
-  .quick-entry button {
-    padding: 5px 8px;
-    font-size: 12px;
-  }
-  .muted-cell { color: var(--text-muted); }
-
-  /* stats charts */
-  .stats-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-  }
-  .bar-row {
-    display: grid;
-    grid-template-columns: 96px 1fr 34px;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-    font-size: 12px;
-  }
-  .bar-row .bar-label {
-    color: var(--text-secondary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .bar-track {
-    background: var(--gridline);
-    border-radius: 4px;
-    height: 14px;
-    position: relative;
-  }
-  .bar-fill {
-    height: 100%;
-    border-radius: 4px;
-    min-width: 4px;
-  }
-  .bar-row .bar-value {
-    text-align: right;
-    color: var(--text-primary);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
-  .no-data {
-    color: var(--text-muted);
-    font-size: 13px;
-    padding: 12px 0;
-  }
-
-  @media (max-width: 760px) {
-    .tiles { grid-template-columns: repeat(2, 1fr); }
-    form.entry { grid-template-columns: repeat(2, 1fr); }
-    form.entry .field.wide { grid-column: span 2; }
-    .stats-grid { grid-template-columns: 1fr; }
-  }
-</style>
+<title>たくみ鍼灸院｜本気で結果を出したい人のためのコンディショニング</title>
+<meta name="description" content="国家資格保有の鍼灸師×アスレティックトレーナーが、経営者・アスリートのコリ・疲労・怪我予防に根本からアプローチ。東陽町・六本木のレンタルスペース、オンライン対応。">
+<meta property="og:title" content="たくみ鍼灸院｜本気で結果を出したい人のためのコンディショニング">
+<meta property="og:description" content="はり師・きゅう師の国家資格と、プロスポーツ現場で培ったアスレティックトレーナーの技術で、整った身体を。">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&family=Zen+Kaku+Gothic+New:wght@500;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="wrap">
-  <h1>怪我管理システム</h1>
-  <p class="subtitle">選手の怪我・離脱状況を記録します</p>
 
-  <div class="tiles">
-    <div class="tile">
-      <div class="label">総件数</div>
-      <div class="value" id="tileTotal">0</div>
-    </div>
-    <div class="tile accent-critical">
-      <div class="label">現在離脱中</div>
-      <div class="value" id="tileOut">0</div>
-    </div>
-    <div class="tile accent-good">
-      <div class="label">復帰済み</div>
-      <div class="value" id="tileReturned">0</div>
-    </div>
-    <div class="tile">
-      <div class="label">平均離脱日数</div>
-      <div class="value" id="tileAvgDays">0</div>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>共有設定(スプレッドシート同期)</h2>
-    <div class="sync-row">
-      <input type="text" id="syncUrlInput" placeholder="Apps Script Web App の URL を貼り付け">
-      <button type="button" class="primary" id="syncConnectBtn">接続</button>
-      <button type="button" class="ghost" id="syncDisconnectBtn" style="display:none;">切断してローカル保存に戻す</button>
-    </div>
-    <div class="sync-status" id="syncStatus"><span class="dot"></span><span id="syncStatusText">未接続(このPC内にのみ保存されています)</span></div>
-    <p class="sync-help">Google スプレッドシートを共有DBにすると、同じURLを設定した他のメンバーとデータを共有できます(8秒ごとに自動更新)。セットアップ方法は同フォルダの Code.gs を参照してください。</p>
-  </div>
-
-  <div class="card">
-    <h2 id="formTitle">新規登録</h2>
-    <form class="entry" id="entryForm">
-      <input type="hidden" id="recordId">
-      <div class="field wide">
-        <label for="name">名前</label>
-        <input type="text" id="name" required placeholder="山田 太郎">
-      </div>
-      <div class="field wide">
-        <label for="diagnosis">診断名</label>
-        <input type="text" id="diagnosis" required placeholder="肉離れ(大腿二頭筋)">
-      </div>
-      <div class="field">
-        <label for="injuryDate">受傷日</label>
-        <input type="date" id="injuryDate" required>
-      </div>
-      <div class="field">
-        <label for="returnDate">復帰日(復帰後に入力可)</label>
-        <input type="date" id="returnDate">
-      </div>
-      <div class="field">
-        <label for="category">区分</label>
-        <select id="category">
-          <option value="練習">練習</option>
-          <option value="試合">試合</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="contact">コンタクト</label>
-        <select id="contact">
-          <option value="接触">接触あり</option>
-          <option value="非接触">接触なし</option>
-        </select>
-      </div>
-      <div class="preview" id="returnPreview"></div>
-      <div class="form-actions">
-        <button type="submit" class="primary" id="submitBtn">追加</button>
-        <button type="button" class="ghost" id="cancelEditBtn" style="display:none;">キャンセル</button>
-      </div>
-    </form>
-  </div>
-
-  <div class="card">
-    <h2>怪我一覧</h2>
-    <div class="toolbar">
-      <button type="button" class="ghost" id="csvExportBtn">CSVエクスポート</button>
-      <label class="file-btn">
-        CSVインポート
-        <input type="file" id="csvImportInput" accept=".csv,text/csv">
-      </label>
-    </div>
-    <div class="filters">
-      <input type="search" id="searchInput" placeholder="名前・診断名で検索">
-      <div class="segmented" id="statusFilter">
-        <button type="button" class="active" data-status="all">すべて</button>
-        <button type="button" data-status="out">離脱中</button>
-        <button type="button" data-status="returned">復帰済み</button>
-      </div>
-    </div>
-    <div class="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>名前</th>
-            <th>診断名</th>
-            <th>受傷日</th>
-            <th>区分</th>
-            <th>コンタクト</th>
-            <th>復帰日</th>
-            <th>離脱日数</th>
-            <th>状態</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>統計・集計</h2>
-    <div class="stats-grid">
-      <div>
-        <div class="label" style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;">診断名別 件数</div>
-        <div id="chartDiagnosis"></div>
-      </div>
-      <div>
-        <div class="label" style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;">区分別 件数</div>
-        <div id="chartCategory"></div>
-      </div>
-    </div>
-  </div>
+<div class="mobile-cta">
+  <a href="https://lin.ee/PMHLKGL" target="_blank" rel="noopener">公式LINEで予約する</a>
 </div>
 
-<script>
-(function () {
-  const STORAGE_KEY = 'injuryTrackerRecords';
+<header class="site-header">
+  <div class="site-header-inner">
+    <span class="brand">たくみ鍼灸院</span>
+    <a href="https://lin.ee/PMHLKGL" class="btn btn-primary btn-small" target="_blank" rel="noopener">予約する</a>
+  </div>
+</header>
 
-  /** @returns {Array} */
-  function loadRecords() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      console.error('failed to load records', e);
-      return [];
-    }
-  }
+<main>
 
-  function saveRecords(records) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-  }
+  <!-- 1. Hero -->
+  <section id="hero" class="section hero">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="hero-inner reveal">
+      <p class="eyebrow">たくみ鍼灸院</p>
+      <h1>その一戦のために。<br>その一日のために。</h1>
+      <p class="lead">
+        はり師・きゅう師の国家資格と、プロスポーツ現場で培った、<br class="pc-only">
+        アスレティックトレーナーとしての技術で、<br class="pc-only">
+        “整った身体”を、本気で結果を出したい人へ。
+      </p>
+      <div class="cta-group">
+        <a href="https://lin.ee/PMHLKGL" class="btn btn-primary" target="_blank" rel="noopener">公式LINEで予約する</a>
+        <a href="https://www.instagram.com/_tk810/" class="btn btn-secondary" target="_blank" rel="noopener">Instagramを見る</a>
+      </div>
+    </div>
+  </section>
 
-  let records = loadRecords();
-  let editingId = null;
-  let statusFilterValue = 'all';
+  <!-- 2. Pain -->
+  <section id="pain" class="section">
+    <div class="section-inner reveal">
+      <h2 class="section-title">こんな状態に、<br class="sp-only">心当たりはありませんか。</h2>
+      <div class="pain-grid">
+        <div class="pain-col">
+          <h3>ビジネスパーソンの方</h3>
+          <ul>
+            <li>肩や首が、常にガチガチに張っている</li>
+            <li>しっかり休んでも、疲れが取れない</li>
+            <li>大事な場面ほど、集中力が続かない</li>
+          </ul>
+        </div>
+        <div class="pain-col">
+          <h3>アスリートの方</h3>
+          <ul>
+            <li>練習や試合の疲労が、抜けきらない</li>
+            <li>怪我をかばいながら、プレーしている</li>
+            <li>シーズンを通して、コンディションを維持できない</li>
+          </ul>
+        </div>
+      </div>
+      <p class="pain-note">
+        一時的に楽になっても、また同じ状態に戻ってしまう。<br>
+        それは、「緩める」ことしかできていないからかもしれません。
+      </p>
+    </div>
+  </section>
 
-  // ---- sync (Google スプレッドシート経由の共有) ----
-  const REMOTE_URL_KEY = 'injuryTrackerRemoteUrl';
-  const POLL_INTERVAL_MS = 8000;
-  let remoteUrl = localStorage.getItem(REMOTE_URL_KEY) || '';
-  let mode = 'local'; // 'local' | 'remote'
-  let pollTimer = null;
+  <!-- 3. Concept / Reasons -->
+  <section id="concept" class="section section-alt">
+    <div class="section-inner reveal">
+      <h2 class="section-title">緩めるだけでは、<br class="sp-only">また戻ってしまう。</h2>
+      <p class="section-lead">
+        コリや疲労、怪我のリスクは、揉みほぐすだけでは根本的に変わりません。<br>
+        必要なのは、鍼灸で身体のコンディションを整えることと、<br>
+        正しく動ける身体をつくるトレーニングの、両方です。
+      </p>
 
-  function genId() {
-    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  }
+      <h3 class="sub-title">たくみ鍼灸院が選ばれる理由</h3>
+      <div class="reasons">
+        <div class="reason">
+          <span class="reason-num">01</span>
+          <h4>国家資格 × プロスポーツ現場基準</h4>
+          <p>はり師・きゅう師の国家資格に加え、JSPO-AT、NASM CES/PES、FMS・SFMAといった、アスリートの身体を支える専門資格を保有。</p>
+        </div>
+        <div class="reason">
+          <span class="reason-num">02</span>
+          <h4>「緩める」と「整える」を、一人で完結</h4>
+          <p>施術とトレーニング指導を一貫して提供することで、その場限りではない、コンディションの土台づくりをサポート。</p>
+        </div>
+        <div class="reason">
+          <span class="reason-num">03</span>
+          <h4>現場を知っている、という強み</h4>
+          <p>関東サッカーリーグ「東京23FC」トレーナーとして、今も現場でプロの身体と向き合い続けている実践知。</p>
+        </div>
+        <div class="reason">
+          <span class="reason-num">04</span>
+          <h4>多忙な毎日に合わせた、柔軟なスタイル</h4>
+          <p>東陽町・六本木のレンタルスペースでの対面に加え、オンラインでのセルフケア指導・カウンセリングにも対応。</p>
+        </div>
+      </div>
 
-  function todayISO() {
-    return new Date().toISOString().slice(0, 10);
-  }
+      <figure class="concept-photo">
+        <img src="images/260411-0149_Original.jpg" alt="東京23FCのグラウンドで、選手のトレーニングを見守る様子">
+        <figcaption>東京23FC トレーナーとして、現場に立ち続けている。</figcaption>
+      </figure>
+    </div>
+  </section>
 
-  function daysBetween(fromIso, toIso) {
-    const d1 = new Date(fromIso + 'T00:00:00');
-    const d2 = new Date(toIso + 'T00:00:00');
-    return Math.round((d2 - d1) / 86400000);
-  }
+  <!-- 4. Profile -->
+  <section id="profile" class="section">
+    <div class="section-inner reveal">
+      <h2 class="section-title">プロフィール</h2>
+      <div class="profile-grid">
+        <div class="profile-photo">
+          <img src="images/IMG_9424.JPG" alt="施術中の様子。丁寧にコンディションを確認している">
+        </div>
+        <div class="profile-body">
+          <p>はじめまして、たくみ鍼灸院です。</p>
+          <p>
+            鍼灸師、そしてアスレティックトレーナーとして、これまでプロサッカーの現場に携わってきました。
+            長野パルセイロレディースでのトレーナー経験を経て、現在は関東サッカーリーグ「東京23FC」のトレーナーを務めながら、
+            経営者・ビジネスパーソン、アスリートの方々のコンディショニングをサポートしています。
+          </p>
+          <p>
+            「緩めるだけでは、また戻ってしまう」。現場で数多くの身体と向き合う中でたどり着いたのが、
+            鍼灸による緩和と、正しく身体を動かすためのトレーニングを掛け合わせるという考え方でした。
+          </p>
+          <p>
+            日々の勉強や論文を読むこと、自身のストレッチも欠かしません。
+            「話しやすい」「聞き上手」と言っていただけるのは、専門家である前に、まず一人として、
+            あなたの身体と時間にきちんと向き合いたいと思っているからです。
+          </p>
 
-  function fmtDate(iso) {
-    const [y, m, d] = iso.split('-');
-    return `${y}/${m}/${d}`;
-  }
+          <h4 class="mini-title">保有資格</h4>
+          <ul class="tag-list">
+            <li>はり師・きゅう師（国家資格）</li>
+            <li>JSPO-AT</li>
+            <li>NASM CES・PES</li>
+            <li>PHI Pilates Mat Ⅰ/Ⅱ</li>
+            <li>PHI Pilates Reformer Ⅰ</li>
+            <li>R-conditioning coach</li>
+            <li>FMS Level1・Level2</li>
+            <li>SFMA Level1</li>
+            <li>TRX STC</li>
+            <li>介護予防運動指導員</li>
+          </ul>
 
-  function isReturned(record) {
-    if (!record.returnDate) return false;
-    return record.returnDate <= todayISO();
-  }
+          <h4 class="mini-title">実績</h4>
+          <ul class="tag-list">
+            <li>現在：関東サッカーリーグ「東京23FC」トレーナー</li>
+            <li>過去：「長野パルセイロレディース」トレーナー</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  function daysOutOf(record) {
-    if (!record.returnDate) return null;
-    return daysBetween(record.injuryDate, record.returnDate);
-  }
+  <div class="photo-band">
+    <img src="images/IMG_9423.JPG" alt="施術風景。背中のコンディションを整えている様子" loading="lazy">
+  </div>
 
-  // ---- sync functions ----
-  const syncUrlInput = document.getElementById('syncUrlInput');
-  const syncConnectBtn = document.getElementById('syncConnectBtn');
-  const syncDisconnectBtn = document.getElementById('syncDisconnectBtn');
-  const syncStatus = document.getElementById('syncStatus');
-  const syncStatusText = document.getElementById('syncStatusText');
+  <!-- 5. Menu -->
+  <section id="menu" class="section section-alt">
+    <div class="section-inner reveal">
+      <h2 class="section-title">施術メニュー・料金</h2>
+      <div class="menu-grid">
+        <div class="menu-card">
+          <div class="menu-card-image">
+            <img src="images/IMG_9422.JPG" alt="鍼灸メンテナンスの施術風景">
+          </div>
+          <h3>鍼灸メンテナンス</h3>
+          <p class="menu-desc">国家資格保有の鍼灸師による、心身のコンディションを整える施術</p>
+          <div class="menu-meta">
+            <span>60〜70分</span>
+            <span class="menu-price">¥12,000</span>
+          </div>
+        </div>
+        <div class="menu-card">
+          <div class="menu-card-image">
+            <img src="images/トレーニング指導風景.jpg" alt="パーソナルトレーニングの指導風景">
+          </div>
+          <h3>パーソナルトレーニング</h3>
+          <p class="menu-desc">アスレティックトレーナーによる、姿勢・動作改善からパフォーマンス向上まで、一人ひとりの目的に合わせた個別運動指導</p>
+          <div class="menu-meta">
+            <span>60〜70分</span>
+            <span class="menu-price">¥10,000</span>
+          </div>
+        </div>
+      </div>
+      <p class="disclaimer">※ 効果には個人差があります。医療行為の代替を目的としたものではありません。</p>
+      <div class="cta-group center">
+        <a href="https://lin.ee/PMHLKGL" class="btn btn-primary" target="_blank" rel="noopener">公式LINEで予約する</a>
+      </div>
+    </div>
+  </section>
 
-  function setSyncStatus(state, text) {
-    syncStatus.className = 'sync-status' + (state ? ' ' + state : '');
-    syncStatusText.textContent = text;
-  }
+  <!-- 6. Flow -->
+  <section id="flow" class="section">
+    <div class="section-inner reveal">
+      <h2 class="section-title">ご利用の流れ</h2>
+      <div class="flow-grid">
+        <div class="flow-card">
+          <h3>対面（レンタルスペース）</h3>
+          <p>東陽町・六本木のレンタルスペースにて実施しています。詳細な場所は、ご予約確定後に個別にご案内します。</p>
+        </div>
+        <div class="flow-card">
+          <h3>オンライン</h3>
+          <p>ビデオ通話にて、セルフケア指導・トレーニング・カウンセリングに対応。遠方の方、外出が難しい方もご利用いただけます。</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  async function remoteFetchAll() {
-    const res = await fetch(remoteUrl, { method: 'GET' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (!Array.isArray(data)) throw new Error('unexpected response');
-    records = data;
-    renderAll();
-  }
+  <!-- 7. Voice -->
+  <section id="voice" class="section section-alt">
+    <div class="section-inner reveal">
+      <h2 class="section-title">お客様の声</h2>
+      <p class="section-lead">施術を受けた方にアンケートにご協力いただきました。多くの方から、満足度10点満点中10点の評価をいただいています。</p>
 
-  async function remoteWrite(action, record) {
-    const res = await fetch(remoteUrl, {
-      method: 'POST',
-      body: JSON.stringify({ action, record }),
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (!Array.isArray(data)) throw new Error('unexpected response');
-    records = data;
-    renderAll();
-  }
+      <div class="voice-grid">
+        <div class="voice-card">
+          <span class="voice-score">満足度 10 / 10</span>
+          <p class="voice-before">施術前のイメージ：鍼灸の料金が高くつくイメージ</p>
+          <p class="voice-quote">「施術前と後での身体の軽さに満足しました。ストレッチの説明も丁寧に教えてもらえるので助かります。初めて鍼灸施術を受けてみて、思っていたより痛みがなかったので良かったです。」</p>
+        </div>
+        <div class="voice-card">
+          <span class="voice-score">満足度 10 / 10</span>
+          <p class="voice-before">施術前のイメージ：痛そう</p>
+          <p class="voice-quote">「ちゃんと話を聞いてくれる印象。電気治療よりも即効性があっていい。体が動きやすくなった。普通の接骨院よりも、サッカーの動きに合わせて教えてくれるのが良かった。」</p>
+        </div>
+        <div class="voice-card">
+          <span class="voice-score">満足度 10 / 10</span>
+          <p class="voice-before">施術前のイメージ：針をさすときに不快感を感じるイメージ</p>
+          <p class="voice-quote">「針をさす際の不快感は全くなく、before・afterでの違いが一目瞭然でした。肩こり、首こりが改善されたことが本当に嬉しかったです。」</p>
+        </div>
+        <div class="voice-card">
+          <span class="voice-score">満足度 10 / 10</span>
+          <p class="voice-before">施術前のイメージ：スポーツトレーナーのように、色々教えてくれそう</p>
+          <p class="voice-quote">「施術後はとにかく軽くなった。肩や足の重さが消えて、一晩寝た今も軽いままです。」</p>
+        </div>
+      </div>
+      <p class="disclaimer">※ ご利用者様アンケートより抜粋。効果には個人差があります。</p>
+    </div>
+  </section>
 
-  function stopPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-  }
+  <!-- 8. FAQ -->
+  <section id="faq" class="section">
+    <div class="section-inner reveal">
+      <h2 class="section-title">よくある質問</h2>
+      <div class="faq-list">
+        <details>
+          <summary>施術は保険適用されますか？</summary>
+          <p>自由診療（保険適用外）のメニューとなります。</p>
+        </details>
+        <details>
+          <summary>キャンセルの場合はどうすればいいですか？</summary>
+          <p>公式LINEにてご連絡ください。</p>
+        </details>
+        <details>
+          <summary>服装は何を用意すればいいですか？</summary>
+          <p>動きやすい服装でお越しください。</p>
+        </details>
+      </div>
+    </div>
+  </section>
 
-  function startPolling() {
-    stopPolling();
-    pollTimer = setInterval(async () => {
-      try {
-        await remoteFetchAll();
-        setSyncStatus('connected', `接続中(スプレッドシートと同期・${POLL_INTERVAL_MS / 1000}秒ごと自動更新)`);
-      } catch (err) {
-        setSyncStatus('error', '同期エラー: 通信状況を確認してください');
-      }
-    }, POLL_INTERVAL_MS);
-  }
+  <!-- 9. CTA -->
+  <section id="cta" class="section cta-section">
+    <div class="section-inner reveal center">
+      <h2 class="section-title">まずは、お気軽にご連絡ください。</h2>
+      <p class="section-lead">公式LINEまたはInstagramのDMから、ご予約・ご相談を承っています。</p>
+      <div class="cta-group center">
+        <a href="https://lin.ee/PMHLKGL" class="btn btn-primary" target="_blank" rel="noopener">公式LINEで予約する</a>
+        <a href="https://www.instagram.com/_tk810/" class="btn btn-secondary" target="_blank" rel="noopener">Instagramで見る</a>
+      </div>
+    </div>
+  </section>
 
-  async function connectSync(url) {
-    const trimmed = url.trim();
-    if (!trimmed) return;
-    remoteUrl = trimmed;
-    setSyncStatus('', '接続確認中…');
-    try {
-      await remoteFetchAll();
-      mode = 'remote';
-      localStorage.setItem(REMOTE_URL_KEY, remoteUrl);
-      syncConnectBtn.style.display = 'none';
-      syncDisconnectBtn.style.display = 'inline-block';
-      syncUrlInput.disabled = true;
-      setSyncStatus('connected', `接続中(スプレッドシートと同期・${POLL_INTERVAL_MS / 1000}秒ごと自動更新)`);
-      startPolling();
-    } catch (err) {
-      mode = 'local';
-      setSyncStatus('error', '接続に失敗しました。URLと公開設定(アクセス:全員)を確認してください');
-    }
-  }
+</main>
 
-  function disconnectSync() {
-    mode = 'local';
-    stopPolling();
-    remoteUrl = '';
-    localStorage.removeItem(REMOTE_URL_KEY);
-    syncUrlInput.value = '';
-    syncUrlInput.disabled = false;
-    syncConnectBtn.style.display = 'inline-block';
-    syncDisconnectBtn.style.display = 'none';
-    setSyncStatus('', '未接続(このPC内にのみ保存されています)');
-    records = loadRecords();
-    renderAll();
-  }
+<footer class="site-footer">
+  <div class="section-inner">
+    <p class="footer-brand">たくみ鍼灸院</p>
+    <p>はり師・きゅう師（国家資格）</p>
+    <p>対応エリア：東陽町・六本木（レンタルスペース）／オンライン</p>
+    <p class="disclaimer">
+      ※ 本サイトの施術・トレーニングは医療行為の代替を目的としたものではありません。<br>
+      体調に不安がある場合は、医療機関を受診してください。
+    </p>
+    <p class="copyright">&copy; たくみ鍼灸院</p>
+  </div>
+</footer>
 
-  syncConnectBtn.addEventListener('click', () => connectSync(syncUrlInput.value));
-  syncDisconnectBtn.addEventListener('click', disconnectSync);
-
-  // ---- form ----
-  const form = document.getElementById('entryForm');
-  const nameInput = document.getElementById('name');
-  const diagnosisInput = document.getElementById('diagnosis');
-  const injuryDateInput = document.getElementById('injuryDate');
-  const returnDateInput = document.getElementById('returnDate');
-  const categoryInput = document.getElementById('category');
-  const contactInput = document.getElementById('contact');
-  const returnPreview = document.getElementById('returnPreview');
-  const recordIdInput = document.getElementById('recordId');
-  const formTitle = document.getElementById('formTitle');
-  const submitBtn = document.getElementById('submitBtn');
-  const cancelEditBtn = document.getElementById('cancelEditBtn');
-
-  injuryDateInput.value = todayISO();
-
-  function updatePreview() {
-    if (injuryDateInput.value && returnDateInput.value) {
-      const days = daysBetween(injuryDateInput.value, returnDateInput.value);
-      returnPreview.textContent = days >= 0
-        ? `離脱日数: ${days}日`
-        : '復帰日は受傷日以降の日付を指定してください';
-    } else {
-      returnPreview.textContent = '';
-    }
-  }
-  injuryDateInput.addEventListener('input', updatePreview);
-  returnDateInput.addEventListener('input', updatePreview);
-
-  function resetForm() {
-    form.reset();
-    injuryDateInput.value = todayISO();
-    recordIdInput.value = '';
-    editingId = null;
-    formTitle.textContent = '新規登録';
-    submitBtn.textContent = '追加';
-    cancelEditBtn.style.display = 'none';
-    updatePreview();
-  }
-
-  cancelEditBtn.addEventListener('click', resetForm);
-
-  form.addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const data = {
-      name: nameInput.value.trim(),
-      diagnosis: diagnosisInput.value.trim(),
-      injuryDate: injuryDateInput.value,
-      category: categoryInput.value,
-      contact: contactInput.value,
-      returnDate: returnDateInput.value === '' ? null : returnDateInput.value,
-    };
-    if (!data.name || !data.diagnosis || !data.injuryDate) return;
-    if (data.returnDate && data.returnDate < data.injuryDate) {
-      alert('復帰日は受傷日以降の日付にしてください');
-      return;
-    }
-
-    submitBtn.disabled = true;
-    try {
-      if (mode === 'remote') {
-        if (editingId) {
-          await remoteWrite('update', { id: editingId, ...data });
-        } else {
-          await remoteWrite('add', data);
-        }
-      } else {
-        if (editingId) {
-          const idx = records.findIndex(r => r.id === editingId);
-          if (idx !== -1) records[idx] = { ...records[idx], ...data };
-        } else {
-          records.push({ id: genId(), ...data });
-        }
-        saveRecords(records);
-        renderAll();
-      }
-      resetForm();
-    } catch (err) {
-      alert('保存に失敗しました。通信状況を確認してください。');
-    } finally {
-      submitBtn.disabled = false;
-    }
-  });
-
-  function startEdit(id) {
-    const r = records.find(r => r.id === id);
-    if (!r) return;
-    editingId = id;
-    recordIdInput.value = id;
-    nameInput.value = r.name;
-    diagnosisInput.value = r.diagnosis;
-    injuryDateInput.value = r.injuryDate;
-    returnDateInput.value = r.returnDate || '';
-    categoryInput.value = r.category;
-    contactInput.value = r.contact === '接触' ? '接触' : '非接触';
-    formTitle.textContent = '編集';
-    submitBtn.textContent = '更新';
-    cancelEditBtn.style.display = 'inline-block';
-    updatePreview();
-    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  async function deleteRecord(id) {
-    const r = records.find(r => r.id === id);
-    if (!r) return;
-    if (!confirm(`${r.name} さんの記録を削除しますか？`)) return;
-    try {
-      if (mode === 'remote') {
-        await remoteWrite('delete', { id });
-      } else {
-        records = records.filter(r => r.id !== id);
-        saveRecords(records);
-        renderAll();
-      }
-      if (editingId === id) resetForm();
-    } catch (err) {
-      alert('削除に失敗しました。通信状況を確認してください。');
-    }
-  }
-
-  // ---- filters ----
-  const searchInput = document.getElementById('searchInput');
-  const statusFilter = document.getElementById('statusFilter');
-  searchInput.addEventListener('input', renderTable);
-  statusFilter.addEventListener('click', function (e) {
-    const btn = e.target.closest('button[data-status]');
-    if (!btn) return;
-    statusFilterValue = btn.dataset.status;
-    [...statusFilter.querySelectorAll('button')].forEach(b => b.classList.toggle('active', b === btn));
-    renderTable();
-  });
-
-  // ---- table ----
-  const tableBody = document.getElementById('tableBody');
-
-  function renderTable() {
-    const q = searchInput.value.trim().toLowerCase();
-    let rows = [...records].sort((a, b) => b.injuryDate.localeCompare(a.injuryDate));
-
-    rows = rows.filter(r => {
-      const matchesQuery = !q || r.name.toLowerCase().includes(q) || r.diagnosis.toLowerCase().includes(q);
-      const returned = isReturned(r);
-      const matchesStatus =
-        statusFilterValue === 'all' ||
-        (statusFilterValue === 'out' && !returned) ||
-        (statusFilterValue === 'returned' && returned);
-      return matchesQuery && matchesStatus;
-    });
-
-    tableBody.innerHTML = '';
-    if (rows.length === 0) {
-      tableBody.innerHTML = `<tr class="empty-row"><td colspan="9">記録がありません</td></tr>`;
-      return;
-    }
-
-    for (const r of rows) {
-      const hasReturn = !!r.returnDate;
-      const returned = isReturned(r);
-      const returnCell = hasReturn
-        ? fmtDate(r.returnDate)
-        : `<span class="quick-entry">
-             <input type="date" min="${r.injuryDate}" data-quick-input="${r.id}">
-             <button type="button" class="link" data-quick-save="${r.id}">記録</button>
-           </span>`;
-      const days = daysOutOf(r);
-      const daysCell = days !== null ? `${days}日` : '<span class="muted-cell">-</span>';
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${escapeHtml(r.name)}</td>
-        <td>${escapeHtml(r.diagnosis)}</td>
-        <td>${fmtDate(r.injuryDate)}</td>
-        <td>${escapeHtml(r.category)}</td>
-        <td>${escapeHtml(r.contact || '-')}</td>
-        <td>${returnCell}</td>
-        <td>${daysCell}</td>
-        <td>
-          <span class="badge ${returned ? 'returned' : 'out'}">
-            <span class="dot"></span>${returned ? '復帰済み' : '離脱中'}
-          </span>
-        </td>
-        <td style="white-space:nowrap;">
-          <button type="button" class="link" data-edit="${r.id}">編集</button>
-          <button type="button" class="link danger" data-delete="${r.id}">削除</button>
-        </td>
-      `;
-      tableBody.appendChild(tr);
-    }
-  }
-
-  async function recordQuickReturn(id) {
-    const input = tableBody.querySelector(`input[data-quick-input="${id}"]`);
-    if (!input) return;
-    const value = input.value;
-    const rec = records.find(r => r.id === id);
-    if (!value || !rec || value < rec.injuryDate) {
-      input.focus();
-      return;
-    }
-    try {
-      if (mode === 'remote') {
-        await remoteWrite('update', { id, returnDate: value });
-      } else {
-        const idx = records.findIndex(r => r.id === id);
-        if (idx === -1) return;
-        records[idx] = { ...records[idx], returnDate: value };
-        saveRecords(records);
-        renderAll();
-      }
-    } catch (err) {
-      alert('保存に失敗しました。通信状況を確認してください。');
-    }
-  }
-
-  tableBody.addEventListener('click', function (e) {
-    const editId = e.target.dataset.edit;
-    const deleteId = e.target.dataset.delete;
-    const quickId = e.target.dataset.quickSave;
-    if (editId) startEdit(editId);
-    if (deleteId) deleteRecord(deleteId);
-    if (quickId) recordQuickReturn(quickId);
-  });
-
-  tableBody.addEventListener('keydown', function (e) {
-    const quickId = e.target.dataset.quickInput;
-    if (quickId && e.key === 'Enter') {
-      e.preventDefault();
-      recordQuickReturn(quickId);
-    }
-  });
-
-  function escapeHtml(str) {
-    return String(str).replace(/[&<>"']/g, c => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[c]));
-  }
-
-  // ---- tiles ----
-  function renderTiles() {
-    const total = records.length;
-    const out = records.filter(r => !isReturned(r)).length;
-    const returned = total - out;
-    const withDays = records.filter(r => r.returnDate);
-    const avg = withDays.length ? (withDays.reduce((s, r) => s + daysOutOf(r), 0) / withDays.length) : 0;
-    document.getElementById('tileTotal').textContent = total;
-    document.getElementById('tileOut').textContent = out;
-    document.getElementById('tileReturned').textContent = returned;
-    document.getElementById('tileAvgDays').textContent = withDays.length ? avg.toFixed(1) : '-';
-  }
-
-  // ---- charts (simple horizontal bars) ----
-  function renderBarChart(container, entries, color) {
-    container.innerHTML = '';
-    if (entries.length === 0) {
-      container.innerHTML = '<div class="no-data">データがありません</div>';
-      return;
-    }
-    const max = Math.max(...entries.map(e => e.count));
-    for (const { label, count } of entries) {
-      const row = document.createElement('div');
-      row.className = 'bar-row';
-      const pct = Math.max((count / max) * 100, 4);
-      row.innerHTML = `
-        <div class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
-        <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color};"></div></div>
-        <div class="bar-value">${count}</div>
-      `;
-      container.appendChild(row);
-    }
-  }
-
-  function renderStats() {
-    const byDiagnosis = {};
-    const byCategory = {};
-    for (const r of records) {
-      byDiagnosis[r.diagnosis] = (byDiagnosis[r.diagnosis] || 0) + 1;
-      byCategory[r.category] = (byCategory[r.category] || 0) + 1;
-    }
-    const diagnosisEntries = Object.entries(byDiagnosis)
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 8);
-    const categoryEntries = Object.entries(byCategory)
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count);
-
-    renderBarChart(document.getElementById('chartDiagnosis'), diagnosisEntries, 'var(--series-1)');
-    renderBarChart(document.getElementById('chartCategory'), categoryEntries, 'var(--series-2)');
-  }
-
-  function renderAll() {
-    renderTiles();
-    renderTable();
-    renderStats();
-  }
-
-  // ---- CSV export / import ----
-  const CSV_HEADER = ['名前', '診断名', '受傷日', '区分', 'コンタクト', '復帰日', '離脱日数'];
-
-  function csvEscape(v) {
-    const s = String(v === null || v === undefined ? '' : v);
-    if (/[",\r\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
-    return s;
-  }
-
-  function exportCSV() {
-    const rows = records.map(r => [r.name, r.diagnosis, r.injuryDate, r.category, r.contact, r.returnDate ?? '', daysOutOf(r) ?? '']);
-    const csv = [CSV_HEADER, ...rows].map(row => row.map(csvEscape).join(',')).join('\r\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `injury-records-${todayISO()}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  // Minimal RFC4180-style parser: handles quoted fields, escaped quotes, commas/newlines inside quotes.
-  function parseCSV(text) {
-    const rows = [];
-    let row = [];
-    let field = '';
-    let inQuotes = false;
-    const src = text.replace(/^﻿/, '');
-    for (let i = 0; i < src.length; i++) {
-      const c = src[i];
-      if (inQuotes) {
-        if (c === '"') {
-          if (src[i + 1] === '"') { field += '"'; i++; }
-          else { inQuotes = false; }
-        } else {
-          field += c;
-        }
-      } else if (c === '"') {
-        inQuotes = true;
-      } else if (c === ',') {
-        row.push(field); field = '';
-      } else if (c === '\r') {
-        // skip, \n handles the break
-      } else if (c === '\n') {
-        row.push(field); field = '';
-        rows.push(row); row = [];
-      } else {
-        field += c;
-      }
-    }
-    if (field !== '' || row.length) { row.push(field); rows.push(row); }
-    return rows.filter(r => r.some(c => c.trim() !== ''));
-  }
-
-  function importCSV(file) {
-    const reader = new FileReader();
-    reader.onload = async function (e) {
-      const rows = parseCSV(String(e.target.result));
-      if (rows.length < 2) { alert('取り込めるデータが見つかりませんでした'); return; }
-      const header = rows[0].map(h => h.trim());
-      const col = name => header.indexOf(name);
-      const iName = col('名前'), iDiag = col('診断名'), iDate = col('受傷日'),
-            iCat = col('区分'), iContact = col('コンタクト'), iReturn = col('復帰日'),
-            iDays = col('離脱日数'); // 離脱日数は旧形式CSVからの互換用フォールバック
-      const newRecords = [];
-      rows.slice(1).forEach(row => {
-        const name = (iName >= 0 ? row[iName] : '').trim();
-        const diagnosis = (iDiag >= 0 ? row[iDiag] : '').trim();
-        const injuryDate = (iDate >= 0 ? row[iDate] : '').trim();
-        if (!name || !diagnosis || !/^\d{4}-\d{2}-\d{2}$/.test(injuryDate)) return;
-        const category = (iCat >= 0 && row[iCat].trim() === '試合') ? '試合' : '練習';
-        const contact = (iContact >= 0 && row[iContact].trim() === '接触') ? '接触' : '非接触';
-        let returnDate = (iReturn >= 0 ? row[iReturn].trim() : '');
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(returnDate)) {
-          const daysRaw = (iDays >= 0 ? row[iDays] : '').trim();
-          const days = daysRaw === '' || Number.isNaN(Number(daysRaw)) ? null : Number(daysRaw);
-          returnDate = days === null ? null : (() => {
-            const d = new Date(injuryDate + 'T00:00:00');
-            d.setDate(d.getDate() + days);
-            return d.toISOString().slice(0, 10);
-          })();
-        }
-        newRecords.push({ name, diagnosis, injuryDate, category, contact, returnDate });
-      });
-      if (newRecords.length === 0) { alert('取り込めるデータが見つかりませんでした'); return; }
-      try {
-        if (mode === 'remote') {
-          for (const rec of newRecords) {
-            await remoteWrite('add', rec);
-          }
-        } else {
-          newRecords.forEach((rec, n) => {
-            records.push({ id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${n}`, ...rec });
-          });
-          saveRecords(records);
-          renderAll();
-        }
-        alert(`${newRecords.length}件のデータを取り込みました`);
-      } catch (err) {
-        alert('取り込みに失敗しました。通信状況を確認してください。');
-      }
-    };
-    reader.readAsText(file, 'UTF-8');
-  }
-
-  document.getElementById('csvExportBtn').addEventListener('click', exportCSV);
-  document.getElementById('csvImportInput').addEventListener('change', function (e) {
-    const file = e.target.files[0];
-    if (file) importCSV(file);
-    e.target.value = '';
-  });
-
-  updatePreview();
-  renderAll();
-
-  if (remoteUrl) {
-    syncUrlInput.value = remoteUrl;
-    connectSync(remoteUrl);
-  }
-})();
-</script>
+<script src="script.js"></script>
 </body>
 </html>
